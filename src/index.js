@@ -4,7 +4,7 @@ const gameState = {};
 
 function onMouseMove(e) {
     gameState.pointer.x = e.pageX;
-    gameState.pointer.y = e.pageY
+    gameState.pointer.y = e.pageY;
 }
 
 function queueUpdates(numTicks) {
@@ -20,46 +20,83 @@ function draw(tFrame) {
     // clear canvas
     context.clearRect(0, 0, canvas.width, canvas.height);
 
-    drawPlatform(context)
-    drawBall(context)
+    drawPlatform(context);
+    drawBall(context);
 }
 
 function update(tick) {
+    const vx = (gameState.pointer.x - gameState.player.x) / 10;
+    gameState.player.x += vx;
 
-    const vx = (gameState.pointer.x - gameState.player.x) / 10
-    gameState.player.x += vx
-
-    const ball = gameState.ball
-    handleBallCollisions()
-
-    ball.y += ball.vy
-    ball.y += ball.vx
+    const ball = gameState.ball;
+    ball.y += ball.vy;
+    ball.x += ball.vx;
+    handleBallCollisions();
 }
 
 function handleBallCollisions(divingFactor){
-    // setting the default for diving factor
-    divingFactor = typeof divingFactor !== 'undefined' ? divingFactor : 0.9
-    const ball =  gameState.ball
-    const ballDivingRadius = ball.radius * divingFactor
+    // Setting the default for diving factor
+    divingFactor = typeof divingFactor !== 'undefined' ? divingFactor : 0.9;
 
-    handleScreenBorderCollision(ball, ballDivingRadius)
+    const ball =  gameState.ball;
+    const ballDivingRadius = ball.radius * divingFactor;
+    // Stop the game if the bottom screen border is hit
+    handleScreenBorderCollision(ball, ballDivingRadius, function(){
+            stopGame(gameState.stopCycle);
+        });
+    handlePaddleCollision(ball, ballDivingRadius,function(){
+        let angleSign = Math.sign(ball.vx);
+        /*
+         Assign the absolute value of y-axis velocity to the x-axis velocity
+         to ensure that the ball stays with the same speed, and reflect it by its own sign
+                /             \ 
+               /      =>       \  
+            -----             -----
+        First iteration (Vx == 0) x-velocity sign is chosen randomly by the following rule:
+            2 * Math.round(Math.random()) - 1. 
+        It's a magic part, resulting in either -1 or 1
+        */
+        ball.vx = (angleSign == 0 ?  2 * Math.round(Math.random()) - 1: angleSign) * Math.abs(ball.vy);
+        ball.vy *= -1;
+    });
 }
 
-function handleScreenBorderCollision(projectile, ballDivingRadius){
+// simple function to check if the projectile hits the paddle
+function checkPaddleHitPlacement(projectilePoint){
+    const paddleWidth = gameState.player.width / 2;
+    return projectilePoint >  gameState.player.x - paddleWidth 
+            && projectilePoint <  gameState.player.x + paddleWidth;
+}
+
+function handlePaddleCollision(projectile, ballDivingRadius, collisionHandler){
+    const player = gameState.player;
+    // Check if the top of the paddle is hit
+    const isHitFromAbove = projectile.y + ballDivingRadius >= player.y - player.height / 2;
+    
+    // Check if the ball hit the paddles` horizontal plane by any side from the center
+    const didHitWithRightSide = checkPaddleHitPlacement(projectile.x + projectile.radius);
+    const didHitWithLeftSide = checkPaddleHitPlacement(projectile.x - projectile.radius);
+
+    if(isHitFromAbove && (didHitWithRightSide || didHitWithLeftSide)){
+        collisionHandler();
+    }
+}
+function handleScreenBorderCollision(projectile, ballDivingRadius, bottomCollisionHandler){
     // Calculating ball collisions with sides and cieling of the playing screen
     const isOutOfHorizontalBounds =  projectile.x - ballDivingRadius <= 0 
-                                    || projectile.x + ballDivingRadius > canvas.width
-    const isOutOfVerticalBounds = projectile.y - ballDivingRadius  <= 0 
+                                    || projectile.x + ballDivingRadius > canvas.width;
+    const isOutOfVerticalBounds = (projectile.y - ballDivingRadius  <= 0) && projectile.vy < 0;
 
     // If the ball has fallen on the 'ground' -- stop the game
     if(projectile.y + ballDivingRadius  > canvas.height){
-        stopGame(gameState.stopCycle)
+        bottomCollisionHandler();
+        return;
     }
     if(isOutOfHorizontalBounds){
-        projectile.vx *= -1
+        projectile.vx *= -1;
     }
     if(isOutOfVerticalBounds){
-        projectile.vy *= -1
+        projectile.vy *= -1;
     }
 }
 
@@ -127,11 +164,11 @@ function setup() {
     };
     gameState.ball = {
         x: canvas.width / 2,
-        y:  30,
+        y:  0,
         radius: 25,
         vx: 0,
         vy: 5
-    }
+    };
 }
 
 setup();
