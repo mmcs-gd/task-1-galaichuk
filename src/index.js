@@ -30,8 +30,37 @@ function update(tick) {
     gameState.player.x += vx
 
     const ball = gameState.ball
+    handleBallCollisions()
+
     ball.y += ball.vy
     ball.y += ball.vx
+}
+
+function handleBallCollisions(divingFactor){
+    // setting the default for diving factor
+    divingFactor = typeof divingFactor !== 'undefined' ? divingFactor : 0.9
+    const ball =  gameState.ball
+    const ballDivingRadius = ball.radius * divingFactor
+
+    handleScreenBorderCollision(ball, ballDivingRadius)
+}
+
+function handleScreenBorderCollision(projectile, ballDivingRadius){
+    // Calculating ball collisions with sides and cieling of the playing screen
+    const isOutOfHorizontalBounds =  projectile.x - ballDivingRadius <= 0 
+                                    || projectile.x + ballDivingRadius > canvas.width
+    const isOutOfVerticalBounds = projectile.y - ballDivingRadius  <= 0 
+
+    // If the ball has fallen on the 'ground' -- stop the game
+    if(projectile.y + ballDivingRadius  > canvas.height){
+        stopGame(gameState.stopCycle)
+    }
+    if(isOutOfHorizontalBounds){
+        projectile.vx *= -1
+    }
+    if(isOutOfVerticalBounds){
+        projectile.vy *= -1
+    }
 }
 
 function run(tFrame) {
@@ -98,7 +127,7 @@ function setup() {
     };
     gameState.ball = {
         x: canvas.width / 2,
-        y: 0,
+        y:  30,
         radius: 25,
         vx: 0,
         vy: 5
