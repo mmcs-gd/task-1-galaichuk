@@ -26,6 +26,9 @@ function draw(tFrame) {
     if (gameState.bonusProjectile.exists) {
         drawBonusProjectile(context);
     }
+    if (gameState.gameOver) {
+        drawGameOverScreen(context);
+    }
 }
 
 function update(tick) {
@@ -39,12 +42,12 @@ function update(tick) {
 
     updateScoreCounter();
     updateBallSpeed();
-
+    // Check if bonus projectile exists and move it around, if not -- create once in 15s
     if (gameState.bonusProjectile.exists) {
         const bonusProjectile = gameState.bonusProjectile;
         bonusProjectile.x += bonusProjectile.vx;
         bonusProjectile.y += bonusProjectile.vy;
-    } else if (gameState.lastTick - gameState.lastBonusCreated >= 5000) {
+    } else if (gameState.lastTick - gameState.lastBonusDestroyed >= 5000) {
         createRandomBonusProjectile();
     }
 
@@ -68,6 +71,7 @@ function run(tFrame) {
 }
 
 function stopGame(handle) {
+    gameState.gameOver = true;
     window.cancelAnimationFrame(handle);
 }
 
@@ -75,7 +79,7 @@ function createRandomBonusProjectile() {
     const bonusProjectile = gameState.bonusProjectile;
     bonusProjectile.x = getRandomInteger(50, canvas.width - 50);
     bonusProjectile.y = getRandomInteger(50, canvas.height * 0.3);
-    bonusProjectile.radius = getRandomInteger(20, 30);
+    bonusProjectile.radius = getRandomInteger(20, 40);
     bonusProjectile.vx = getRandomInteger(-6, 7);
     bonusProjectile.vy = getRandomInteger(1, 4);
     bonusProjectile.exists = true;
@@ -113,12 +117,12 @@ function handleBonusCollisions() {
     if (!bonusProjectile.exists) return;
     handleScreenBorderCollision(bonusProjectile, bonusProjectile.radius, function () {
         bonusProjectile.exists = false;
-        gameState.lastBonusCreated = gameState.lastTick;
+        gameState.lastBonusDestroyed = gameState.lastTick;
     })
     handlePaddleCollision(bonusProjectile, bonusProjectile.radius, function () {
         gameState.scoreCounter.currentScore += 15;
         bonusProjectile.exists = false;
-        gameState.lastBonusCreated = gameState.lastTick;
+        gameState.lastBonusDestroyed = gameState.lastTick;
     })
 }
 // simple function to check if the projectile hits the paddle
@@ -133,16 +137,11 @@ function handlePaddleCollision(projectile, ballDivingRadius, collisionHandler) {
     const isHitFromAbove = projectile.y + ballDivingRadius >= player.y - player.height / 2;
 
     const paddleWidth = gameState.player.width / 2;
-    const paddleHeight = gameState.player.height / 2;
 
     // Check if the ball hit the paddles` horizontal plane by any side from the center
     const fitsToPaddleFromLeft = checkPaddleHitPlacement(projectile.x + projectile.radius, paddleWidth);
     const fitsToPaddleFromRight = checkPaddleHitPlacement(projectile.x - projectile.radius, paddleWidth);
 
-    // const rightEndPaddleHit = checkPaddleHitPlacement(projectile.y + projectile.radius, paddleHeight);
-    // const leftEndPaddleHit = checkPaddleHitPlacement(projectile.y - projectile.radius, paddleHeight);
-
-    // const isHitFromOther = rightEndPaddleHit || leftEndPaddleHit;
     if (isHitFromAbove && (fitsToPaddleFromRight || fitsToPaddleFromLeft)) {
         collisionHandler();
     }
@@ -169,6 +168,7 @@ function handleScreenBorderCollision(projectile, ballDivingRadius, bottomCollisi
 }
 
 function updateScoreCounter() {
+    // Once in a second give a free score point to the player
     if (gameState.lastTick - gameState.lastScoreUpdateTime >= 1000) {
         gameState.scoreCounter.currentScore++;
         gameState.lastScoreUpdateTime = gameState.lastTick;
@@ -176,6 +176,7 @@ function updateScoreCounter() {
 }
 
 function updateBallSpeed() {
+    // Update the ball speed every 5s
     if (gameState.lastTick - gameState.lastBallSpeedChangeTime >= 5000) {
         gameState.ball.vy *= 1.1;
         gameState.ball.vx *= 1.1;
@@ -191,27 +192,52 @@ function getRandomInteger(lowerBound, upperBound) {
 function drawPlatform(context) {
     const { x, y, width, height } = gameState.player;
     context.beginPath();
-    context.rect(x - width / 2, y - height / 2, width, height);
-    context.fillStyle = "#FF0000";
+
+    context.fillStyle = "#323489";
+    context.rect(x - width / 2, y - height / 2, width, height / 2);
     context.fill();
     context.closePath();
+
+    context.beginPath();
+    context.fillStyle = "#664400";
+    context.rect(x - width / 2, y - height / 4, width, height / 2);
+    context.fill();
+    context.closePath();
+
 }
 
 function drawBall(context) {
     const { x, y, radius } = gameState.ball;
     context.beginPath();
+    let gradient = context.createRadialGradient(x, y, radius, x, y, radius / 10);
+    gradient.addColorStop(0, "red");
+    gradient.addColorStop(1, "white");
     context.arc(x, y, radius, 0, 2 * Math.PI);
-    context.fillStyle = "#0000FF";
+    context.fillStyle = gradient;
     context.fill();
     context.closePath();
 }
 
 function drawScoreCounter(context) {
-    const { x, y, width, height, currentScore } = gameState.scoreCounter;
+    const { x, y, currentScore } = gameState.scoreCounter;
+    context.font = "100px Bitwise";
+    context.fillStyle = "#323459";
+    context.fillText("Score: " + currentScore, x, y);
+}
+
+function drawGameOverScreen(context) {
+    const x = canvas.width / 2;
+    const y = canvas.height / 2;
+
     context.font = "124px Bitwise";
     context.textAlign = "center";
     context.fillStyle = "#323459";
-    context.fillText(currentScore, x + width / 2, y + height / 2 + 5);
+    context.fillText("GAME OVER =(", x, y);
+
+    context.font = "40px Bitwise";
+    context.textAlign = "center";
+    context.fillStyle = "#323459";
+    context.fillText("Reload this page to try one more time!", x, y + 200);
 }
 
 function drawBonusProjectile(context) {
@@ -219,10 +245,9 @@ function drawBonusProjectile(context) {
     context.beginPath();
     context.rect(x, y, radius / 3, radius)
     context.rect(x - radius / 3, y + radius / 3, radius, radius / 3)
-    context.fillStyle = "#0000FF";
+    context.fillStyle = "#0000b3";
     context.fill();
     context.closePath();
-
 }
 
 function setup() {
@@ -235,9 +260,9 @@ function setup() {
     gameState.tickLength = 15; //ms
     gameState.lastScoreUpdateTime = 0;
     gameState.lastBallSpeedChangeTime = 0;
-    gameState.lastBonusCreated = 0;
-
-    // Load custom bitwise font
+    gameState.lastBonusDestroyed = 0;
+    gameState.gameOver = false;
+    // Load custom font
     var bitwiseFont = new FontFace('Bitwise', 'url(fonts/bitwise.ttf)');
     bitwiseFont.load().then(function (loaded_face) {
         document.fonts.add(loaded_face);
@@ -277,9 +302,7 @@ function setup() {
     gameState.scoreCounter = {
         x: 100,
         y: 100,
-        width: 100,
-        height: 100,
-        currentScore: 0
+        currentScore: 95
     }
 }
 
