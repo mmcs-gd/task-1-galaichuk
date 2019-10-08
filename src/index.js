@@ -23,6 +23,9 @@ function draw(tFrame) {
     drawPlatform(context);
     drawBall(context);
     drawScoreCounter(context);
+    if (gameState.bonusProjectile.exists) {
+        drawBonusProjectile(context);
+    }
 }
 
 function update(tick) {
@@ -30,11 +33,23 @@ function update(tick) {
     gameState.player.x += vx;
 
     const ball = gameState.ball;
-    ball.y += ball.vy;
-    ball.x += ball.vx;
+
     handleBallCollisions();
+    handleBonusCollisions();
+
     updateScoreCounter();
     updateBallSpeed();
+
+    if (gameState.bonusProjectile.exists) {
+        const bonusProjectile = gameState.bonusProjectile;
+        bonusProjectile.x += bonusProjectile.vx;
+        bonusProjectile.y += bonusProjectile.vy;
+    } else if (gameState.lastTick - gameState.lastBonusCreated >= 5000) {
+        createRandomBonusProjectile();
+    }
+
+    ball.y += ball.vy;
+    ball.x += ball.vx;
 }
 
 function run(tFrame) {
@@ -54,6 +69,16 @@ function run(tFrame) {
 
 function stopGame(handle) {
     window.cancelAnimationFrame(handle);
+}
+
+function createRandomBonusProjectile() {
+    const bonusProjectile = gameState.bonusProjectile;
+    bonusProjectile.x = getRandomInteger(50, canvas.width - 50);
+    bonusProjectile.y = getRandomInteger(50, canvas.height * 0.3);
+    bonusProjectile.radius = getRandomInteger(20, 30);
+    bonusProjectile.vx = getRandomInteger(-6, 7);
+    bonusProjectile.vy = getRandomInteger(1, 4);
+    bonusProjectile.exists = true;
 }
 
 function handleBallCollisions(divingFactor) {
@@ -83,11 +108,23 @@ function handleBallCollisions(divingFactor) {
     });
 }
 
+function handleBonusCollisions() {
+    const bonusProjectile = gameState.bonusProjectile;
+    if (!bonusProjectile.exists) return;
+    handleScreenBorderCollision(bonusProjectile, bonusProjectile.radius, function () {
+        bonusProjectile.exists = false;
+        gameState.lastBonusCreated = gameState.lastTick;
+    })
+    handlePaddleCollision(bonusProjectile, bonusProjectile.radius, function () {
+        gameState.scoreCounter.currentScore += 15;
+        bonusProjectile.exists = false;
+        gameState.lastBonusCreated = gameState.lastTick;
+    })
+}
 // simple function to check if the projectile hits the paddle
-function checkPaddleHitPlacement(projectilePoint) {
-    const paddleWidth = gameState.player.width / 2;
-    return projectilePoint > gameState.player.x - paddleWidth
-        && projectilePoint < gameState.player.x + paddleWidth;
+function checkPaddleHitPlacement(projectilePoint, referencePoint) {
+    return projectilePoint > gameState.player.x - referencePoint
+        && projectilePoint < gameState.player.x + referencePoint;
 }
 
 function handlePaddleCollision(projectile, ballDivingRadius, collisionHandler) {
@@ -95,11 +132,18 @@ function handlePaddleCollision(projectile, ballDivingRadius, collisionHandler) {
     // Check if the top of the paddle is hit
     const isHitFromAbove = projectile.y + ballDivingRadius >= player.y - player.height / 2;
 
-    // Check if the ball hit the paddles` horizontal plane by any side from the center
-    const didHitWithRightSide = checkPaddleHitPlacement(projectile.x + projectile.radius);
-    const didHitWithLeftSide = checkPaddleHitPlacement(projectile.x - projectile.radius);
+    const paddleWidth = gameState.player.width / 2;
+    const paddleHeight = gameState.player.height / 2;
 
-    if (isHitFromAbove && (didHitWithRightSide || didHitWithLeftSide)) {
+    // Check if the ball hit the paddles` horizontal plane by any side from the center
+    const fitsToPaddleFromLeft = checkPaddleHitPlacement(projectile.x + projectile.radius, paddleWidth);
+    const fitsToPaddleFromRight = checkPaddleHitPlacement(projectile.x - projectile.radius, paddleWidth);
+
+    // const rightEndPaddleHit = checkPaddleHitPlacement(projectile.y + projectile.radius, paddleHeight);
+    // const leftEndPaddleHit = checkPaddleHitPlacement(projectile.y - projectile.radius, paddleHeight);
+
+    // const isHitFromOther = rightEndPaddleHit || leftEndPaddleHit;
+    if (isHitFromAbove && (fitsToPaddleFromRight || fitsToPaddleFromLeft)) {
         collisionHandler();
     }
 }
@@ -117,6 +161,8 @@ function handleScreenBorderCollision(projectile, ballDivingRadius, bottomCollisi
     if (isOutOfHorizontalBounds) {
         projectile.vx *= -1;
     }
+    // This block will never execute for projectiles, who are not able to move upwards
+    // E.g. bonuses
     if (isOutOfVerticalBounds) {
         projectile.vy *= -1;
     }
@@ -136,6 +182,11 @@ function updateBallSpeed() {
         gameState.lastBallSpeedChangeTime = gameState.lastTick;
     }
 }
+
+function getRandomInteger(lowerBound, upperBound) {
+    return Math.random() * (upperBound - lowerBound) + lowerBound;
+}
+
 
 function drawPlatform(context) {
     const { x, y, width, height } = gameState.player;
@@ -158,8 +209,20 @@ function drawBall(context) {
 function drawScoreCounter(context) {
     const { x, y, width, height, currentScore } = gameState.scoreCounter;
     context.font = "124px Bitwise";
+    context.textAlign = "center";
     context.fillStyle = "#323459";
     context.fillText(currentScore, x + width / 2, y + height / 2 + 5);
+}
+
+function drawBonusProjectile(context) {
+    const { x, y, radius } = gameState.bonusProjectile;
+    context.beginPath();
+    context.rect(x, y, radius / 3, radius)
+    context.rect(x - radius / 3, y + radius / 3, radius, radius / 3)
+    context.fillStyle = "#0000FF";
+    context.fill();
+    context.closePath();
+
 }
 
 function setup() {
@@ -172,6 +235,7 @@ function setup() {
     gameState.tickLength = 15; //ms
     gameState.lastScoreUpdateTime = 0;
     gameState.lastBallSpeedChangeTime = 0;
+    gameState.lastBonusCreated = 0;
 
     // Load custom bitwise font
     var bitwiseFont = new FontFace('Bitwise', 'url(fonts/bitwise.ttf)');
@@ -202,6 +266,14 @@ function setup() {
         vx: 0,
         vy: 5
     };
+    gameState.bonusProjectile = {
+        x: 0,
+        y: 0,
+        radius: 0,
+        vx: 0,
+        vy: 0,
+        exists: false
+    }
     gameState.scoreCounter = {
         x: 100,
         y: 100,
