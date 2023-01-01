@@ -18,6 +18,6 @@
   "homepage": "https://github.com/Wolwer1nE/ping-pong-test#readme",
   "devDependencies": {
     "@babel/core": "^7.5.5",
-    "parcel": "^1.12.3"
+    "parcel": "^2.8.2"
   }
 }
